@@ -1,15 +1,21 @@
 //canvas vars
 var canvas;
 var ctx;
-var players = [];
+var player;
 var platforms = [];
+var edges = [];
+var inputs = {
+    left: false,
+    up: false,
+    right: false,
+    down: false
+};
 var timestamp = Date.now();
+var STICKY_THRESHOLD = .0004;
+var JERK = 100;
+var MAX_VELOCITY = 50;
 
-//constants
-var FRICTION = 20;
-var GRAVITY = 50;
-
-$(document).ready(function() {
+function init() {
     canvas = document.getElementById('canvas');
     canvas.width = 600;
     canvas.height = 600;
@@ -17,93 +23,214 @@ $(document).ready(function() {
     document.addEventListener('keydown', keyDown, false);
     document.addEventListener('keyup', keyUp, false);
 
-    players.push(new player());
-    console.log(players.length);
+    player = new entity();
+
+    platforms.push(new entity(100, 100));
+    platforms.push(new entity(200, 200));
+
+    edges.push(new entity(-100, 0, 100, 600));
+    edges.push(new entity(0, -100, 600, 100));
+    edges.push(new entity(600, 0, 100, 600));
+    edges.push(new entity(0, 600, 600, 100));
 
     window.requestAnimationFrame(gameLoop);
-});
+}
 
 function keyDown(e) {
     e.preventDefault();
-    var key = e.keyCode;
-    for(var p=0; p<players.length; p++) {
-        players[p].setInput(key, true);
+    switch(e.keyCode) {
+        case 37: 
+            inputs.left = true;
+            break;
+        case 38: 
+            inputs.up = true;
+            break;
+        case 39: 
+            inputs.right = true;
+            break;
+        case 40: 
+            inputs.down = true;
+            break;
     }
 }
 
 function keyUp(e) {
     e.preventDefault();
-    var key = e.keyCode;
-    for(var p=0; p<players.length; p++) {
-        players[p].setInput(key, false);
+    switch(e.keyCode) {
+        case 37: 
+            inputs.left = false;
+            break;
+        case 38: 
+            inputs.up = false;
+            break;
+        case 39: 
+            inputs.right = false;
+            break;
+        case 40: 
+            inputs.down = false;
+            break;
     }
 }
 
-function gameLoop() {
-    //calculate delta
+function updatePosition() {
     var now = Date.now();
     var delta = (now - timestamp) / 1000;
     timestamp = now;
 
-    //move players
-    for(var p=0; p<players.length; p++) {
-        players[p].update(delta);
+    player.vx += player.ax * delta;
+    player.vy += player.ay * delta;
+
+    player.x += player.vx * delta;
+    player.y += player.vy * delta;
+
+    if(inputs.left) {
+        player.ax -= delta * JERK;
+    } else if(inputs.right) {
+        player.ax += delta * JERK;
     }
 
-    //check player collision
-    var left, right;
-    for(var p=0; p<players.length; p++) {
-        left = players[p];
-        for(var r=p+1; r<players.length; r++) {
-            right = players[r];
-            if(checkCollision(left, right)) {
-                //deal with collision
-            }
+    if(inputs.up) {
+        player.ay -= delta * JERK;
+    } else if(inputs.down) {
+        player.ay += delta * JERK;
+    }
+}
+
+function solveCollision(platform) {
+    var pMidX = player.getMidX();
+    var pMidY = player.getMidY();
+    var tMidX = platform.getMidX();
+    var tMidY = platform.getMidY();
+
+    // position of player midpoint relative to platform midpoint
+    var dx = (tMidX - pMidX) / platform.halfWidth;
+    var dy = (tMidY - pMidY) / platform.halfHeight;
+
+    var absDX = Math.abs(dx);
+    var absDY = Math.abs(dy);
+
+    // corner collision
+    if(Math.abs(absDX - absDY) < .1) {
+        if(dx < 0) {
+            player.setLeft(platform.getRight());
+        } else {
+            player.setRight(platform.getLeft());
+        }
+
+        if(dy < 0) {
+            player.setTop(platform.getBottom());
+        } else {
+            player.setBottom(platform.getTop());
+        }
+
+        player.vx *= -1;
+        player.vy *= -1;
+
+    // horizontal collision
+    } else if(absDX > absDY) {
+        if(dx < 0) {
+            player.setLeft(platform.getRight());
+        } else {
+            player.setRight(platform.getLeft());
+        }
+
+        player.vx *= -1;
+
+    // vertical collision
+    } else {
+        if(dy < 0) {
+            player.setTop(platform.getBottom());
+        } else {
+            player.setBottom(platform.getTop());
+        }
+
+        player.vy *= -1;
+    }
+
+    player.ax = 0;
+    player.ay = 0;
+}
+
+function checkCollision() {
+    var platform;
+
+    //check platform collision
+    for(var t=0; t<platforms.length; t++) {
+        platform = platforms[t];
+        if(collideRect(player, platform)) {
+            solveCollision(platform);
         }
     }
 
-    //draw
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for(var p=0; p<players.length; p++) {
-        players[p].draw(ctx);
+    //check edge collision
+    for(var t=0; t<edges.length; t++) {
+        platform = edges[t];
+        if(collideRect(player, platform)) {
+            solveCollision(platform);
+        }
     }
+}
+
+function applyLimits() {
+    if(Math.abs(player.vx) > MAX_VELOCITY) {
+        player.ax = 0;
+        if(player.vx > 0) {
+            player.vx = MAX_VELOCITY;
+        } else {
+            player.vx = -MAX_VELOCITY;
+        }
+    }
+
+    if(Math.abs(player.vy) > MAX_VELOCITY) {
+        player.ay = 0;
+        if(player.vy > 0) {
+            player.vy = MAX_VELOCITY;
+        } else {
+            player.vy = -MAX_VELOCITY;
+        }
+    }
+}
+
+function renderEntities() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = 'white';
+    ctx.fillRect(player.x, player.y, player.width, player.height);
+
+    var platform;
+    ctx.fillStyle = 'red';
+    for(var p=0; p<platforms.length; p++) {
+        platform = platforms[p];
+        ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+    }
+}
+
+function gameLoop() {
+    updatePosition();
+    checkCollision();
+    applyLimits();
+    renderEntities();
+
+    console.log(player.x+', '+player.y);
 
     //queue next loop
     window.requestAnimationFrame(gameLoop);
 }
 
-function checkCollision(left, right) {
-    var x = left.position.x;
-    var y = left.position.y;
-    var x2 = x + left.size.x;
-    var y2 = y + left.size.y;
+function collideRect(a, b) {
+    var al = a.getLeft();
+    var at = a.getTop();
+    var ar = a.getRight();
+    var ab = a.getBottom();
 
-    var xx = right.position.x;
-    var yy = right.position.y;
-    var xx2 = x + right.size.x;
-    var yy2 = y + right.size.y;
+    var bl = b.getLeft();
+    var bt = b.getTop();
+    var br = b.getRight();
+    var bb = b.getBottom();
 
-    if (x > xx && x < xx2 && y > yy && y < yy2) {
-        return true;
-    } else if (x2 > xx && x2 < xx2 && y > yy && y < yy2) {
-        return true;
-    } else if (x > xx && x < xx2 && y2 > yy && y2 < yy2) {
-        return true;
-    } else if (x2 > xx && x2 < xx2 && y2 > yy && y2 < yy2) {
-        return true;
-    } else if (xx > x && xx < x2 && yy > y && yy < y2) {
-        return true;
-    } else if (xx2 > x && xx2 < x2 && yy > y && yy < y2) {
-        return true;
-    } else if (xx > x && xx < x2 && yy2 > y && yy2 < y2) {
-        return true;
-    } else if (xx2 > x && xx2 < x2 && yy2 > y && yy2 < y2) {
-        return true;
-    } else if (x == xx && x2 == xx2 && ((y > yy && y < yy2) || y2 > yy && y < yy2)) {
-        return true;
-    } else if (y == yy && y2 == yy2 && ((x > xx && x < xx2) || x2 > xx && x < xx2)) {
-        return true;
-    } else {
+    if(al >= br || ar <= bl || at >= bb || ab <= bt) {
         return false;
     }
+
+    return true;
 }
