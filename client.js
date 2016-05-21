@@ -2,6 +2,8 @@
 var canvas;
 var ctx;
 var player;
+var airborn = true;
+var jumpTimer = 0;
 var platforms = [];
 var edges = [];
 var inputs = {
@@ -11,11 +13,18 @@ var inputs = {
     down: false
 };
 var timestamp = Date.now();
-var JERK = 100;
-var MAX_VELOCITY = 50;
-var GRAVITY = 10;
-var MAX_FALL = 100;
-var FRICTION = 10;
+
+var GRAVITY = 20;
+var FRICTION = 20;
+
+var GROUND_JERK = 100;
+var AIR_JERK = 50;
+var JUMP_VELOCITY = 150;
+var MAX_JUMP_TIME = .5;
+
+var MAX_GROUND_VELOCITY = 50;
+var MAX_AIR_VELOCITY = 25;
+var MAX_FALL_VELOCITY = 100;
 
 function init() {
     canvas = document.getElementById('canvas');
@@ -26,9 +35,10 @@ function init() {
     document.addEventListener('keyup', keyUp, false);
 
     player = new entity();
+    player.y = 550;
 
-    platforms.push(new entity(100, 100));
-    platforms.push(new entity(200, 200));
+    platforms.push(new entity(300, 475));
+    platforms.push(new entity(400, 550));
 
     edges.push(new entity(-100, 0, 100, 600));
     edges.push(new entity(0, -100, 600, 100));
@@ -41,16 +51,16 @@ function init() {
 function keyDown(e) {
     e.preventDefault();
     switch(e.keyCode) {
-        case 37: 
+        case 37:
             inputs.left = true;
             break;
-        case 38: 
+        case 38:
             inputs.up = true;
             break;
-        case 39: 
+        case 39:
             inputs.right = true;
             break;
-        case 40: 
+        case 40:
             inputs.down = true;
             break;
     }
@@ -59,16 +69,16 @@ function keyDown(e) {
 function keyUp(e) {
     e.preventDefault();
     switch(e.keyCode) {
-        case 37: 
+        case 37:
             inputs.left = false;
             break;
-        case 38: 
+        case 38:
             inputs.up = false;
             break;
-        case 39: 
+        case 39:
             inputs.right = false;
             break;
-        case 40: 
+        case 40:
             inputs.down = false;
             break;
     }
@@ -86,22 +96,40 @@ function updatePosition() {
     player.y += player.vy * delta;
 
     if(inputs.left) {
-        player.ax -= delta * JERK;
+        if(airborn) {
+            player.ax -= delta * AIR_JERK;
+        } else {
+            player.ax -= delta * GROUND_JERK;
+        }
     } else if(inputs.right) {
-        player.ax += delta * JERK;
+        if(airborn) {
+            player.ax += delta * AIR_JERK;
+        } else {
+            player.ax += delta * GROUND_JERK;
+        }
     } else {
         player.ax = 0;
-        if(Math.abs(player.vx) < delta * FRICTION) {
-            player.vx = 0;
-        } else if(player.vx > 0) {
-            player.vx -= delta * FRICTION;
-        } else {
-            player.vx += delta * FRICTION;
+        if(!airborn) {
+            if(Math.abs(player.vx) < delta * FRICTION) {
+                player.vx = 0;
+            } else if(player.vx > 0) {
+                player.vx -= delta * FRICTION;
+            } else {
+                player.vx += delta * FRICTION;
+            }
         }
     }
 
     if(inputs.up) {
-        player.ay -= delta * JERK;
+        if(!airborn) {
+            jumpTimer = MAX_JUMP_TIME;
+            player.vy = -JUMP_VELOCITY;
+            airborn = true;
+        } else if(jumpTimer <= 0) {
+            player.ay += GRAVITY;
+        } else {
+            jumpTimer -= delta;
+        }
     } else {
         player.ay += GRAVITY;
     }
@@ -155,9 +183,11 @@ function solveCollision(platform) {
         if(dy < 0) {
             player.setTop(platform.getBottom());
             player.vy *= -1;
+            jumpTimer = 0;
         } else {
             player.setBottom(platform.getTop());
             player.vy = 0;
+            airborn = false;
         }
         player.ay = 0;
     }
@@ -183,21 +213,43 @@ function checkCollision() {
     }
 }
 
-function applyLimits() {
-    if(Math.abs(player.vx) > MAX_VELOCITY) {
-        player.ax = 0;
-        if(player.vx > 0) {
-            player.vx = MAX_VELOCITY;
-        } else {
-            player.vx = -MAX_VELOCITY;
+function checkAirborn() {
+    if(airborn) return;
+
+    airborn = true;
+    player.y += 1;
+
+    //check platform collision
+    for(var t=0; t<platforms.length; t++) {
+        platform = platforms[t];
+        if(collideRect(player, platform)) {
+            airborn = false;
         }
     }
 
-    if(player.vy > MAX_FALL) {
-        player.vy = MAX_FALL;
-        player.ay = 0;
-    } else if(player.vy < -MAX_VELOCITY) {
-        player.vy = -MAX_VELOCITY;
+    //check edge collision
+    for(var t=0; t<edges.length; t++) {
+        platform = edges[t];
+        if(collideRect(player, platform)) {
+            airborn = false;
+        }
+    }
+
+    player.y -= 1;
+}
+
+function applyLimits() {
+    if(Math.abs(player.vx) > MAX_GROUND_VELOCITY) {
+        player.ax = 0;
+        if(player.vx > 0) {
+            player.vx = MAX_GROUND_VELOCITY;
+        } else {
+            player.vx = -MAX_GROUND_VELOCITY;
+        }
+    }
+
+    if(player.vy > MAX_FALL_VELOCITY) {
+        player.vy = MAX_FALL_VELOCITY;
         player.ay = 0;
     }
 }
@@ -219,6 +271,7 @@ function renderEntities() {
 function gameLoop() {
     updatePosition();
     checkCollision();
+    checkAirborn();
     applyLimits();
     renderEntities();
 
