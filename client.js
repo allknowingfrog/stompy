@@ -11,9 +11,11 @@ var inputs = {
     down: false
 };
 var timestamp = Date.now();
-var STICKY_THRESHOLD = .0004;
 var JERK = 100;
 var MAX_VELOCITY = 50;
+var GRAVITY = 10;
+var MAX_FALL = 100;
+var FRICTION = 10;
 
 function init() {
     canvas = document.getElementById('canvas');
@@ -87,12 +89,21 @@ function updatePosition() {
         player.ax -= delta * JERK;
     } else if(inputs.right) {
         player.ax += delta * JERK;
+    } else {
+        player.ax = 0;
+        if(Math.abs(player.vx) < delta * FRICTION) {
+            player.vx = 0;
+        } else if(player.vx > 0) {
+            player.vx -= delta * FRICTION;
+        } else {
+            player.vx += delta * FRICTION;
+        }
     }
 
     if(inputs.up) {
         player.ay -= delta * JERK;
-    } else if(inputs.down) {
-        player.ay += delta * JERK;
+    } else {
+        player.ay += GRAVITY;
     }
 }
 
@@ -123,6 +134,8 @@ function solveCollision(platform) {
             player.setBottom(platform.getTop());
         }
 
+        player.ax = 0;
+        player.ay = 0;
         player.vx *= -1;
         player.vy *= -1;
 
@@ -134,21 +147,20 @@ function solveCollision(platform) {
             player.setRight(platform.getLeft());
         }
 
+        player.ax = 0;
         player.vx *= -1;
 
     // vertical collision
     } else {
         if(dy < 0) {
             player.setTop(platform.getBottom());
+            player.vy *= -1;
         } else {
             player.setBottom(platform.getTop());
+            player.vy = 0;
         }
-
-        player.vy *= -1;
+        player.ay = 0;
     }
-
-    player.ax = 0;
-    player.ay = 0;
 }
 
 function checkCollision() {
@@ -181,13 +193,12 @@ function applyLimits() {
         }
     }
 
-    if(Math.abs(player.vy) > MAX_VELOCITY) {
+    if(player.vy > MAX_FALL) {
+        player.vy = MAX_FALL;
         player.ay = 0;
-        if(player.vy > 0) {
-            player.vy = MAX_VELOCITY;
-        } else {
-            player.vy = -MAX_VELOCITY;
-        }
+    } else if(player.vy < -MAX_VELOCITY) {
+        player.vy = -MAX_VELOCITY;
+        player.ay = 0;
     }
 }
 
@@ -210,8 +221,6 @@ function gameLoop() {
     checkCollision();
     applyLimits();
     renderEntities();
-
-    console.log(player.x+', '+player.y);
 
     //queue next loop
     window.requestAnimationFrame(gameLoop);
