@@ -14,19 +14,20 @@ var inputs = {
 };
 var timestamp = Date.now();
 
-var GRAVITY = 200;
-var FRICTION = 150;
+var GRAVITY = 500;
 var BOUNCE = .5;
+var MIN_BOUNCE_VELOCITY = .5;
+var FRICTION_DECEL = 3;
+var MIN_SLIDE_VELOCITY = .5;
+var JUMP_DECEL = 3;
 
-var GROUND_JERK = 500;
-var AIR_JERK = 200;
-var JUMP_JERK = 10000;
-var MAX_JUMP_TIME = .5;
+var GROUND_ACCEL = 500;
+var AIR_ACCEL = 200;
+var JUMP_VELOCITY = 300;
+var MAX_JUMP_TIME = .2;
 
-var MAX_GROUND_VELOCITY = 100;
-var MAX_AIR_VELOCITY = 25;
-var MAX_JUMP_VELOCITY = 150;
-var MAX_FALL_VELOCITY = 200;
+var MAX_VELOCITY = 100;
+var MAX_FALL_VELOCITY = 500;
 
 function init() {
     canvas = document.getElementById('canvas');
@@ -39,8 +40,10 @@ function init() {
     player = new entity();
     player.y = 550;
 
-    platforms.push(new entity(300, 475));
-    platforms.push(new entity(400, 550));
+    platforms.push(new entity(100, 550));
+    platforms.push(new entity(225, 475));
+    platforms.push(new entity(100, 400));
+    platforms.push(new entity(225, 325));
 
     edges.push(new entity(-100, 0, 100, 600));
     edges.push(new entity(0, -100, 600, 100));
@@ -93,89 +96,61 @@ function updatePosition() {
 
     if(inputs.left) {
         if(airborn) {
-            player.ax -= delta * AIR_JERK;
+            player.vx -= delta * AIR_ACCEL;
         } else {
-            if(player.ax > 0) {
-                player.ax = 0;
-            }
             if(player.vx > 0) {
-                if(Math.abs(player.vx) < delta * FRICTION) {
-                    player.vx = 0;
-                } else {
-                    player.vx -= delta * FRICTION;
-                }
+                player.vx -= delta * player.vx * FRICTION_DECEL;
+                if(player.vx < MIN_SLIDE_VELOCITY) player.vx = 0;
             }
-            player.ax -= delta * GROUND_JERK;
+            player.vx -= delta * GROUND_ACCEL;
         }
     } else if(inputs.right) {
         if(airborn) {
-            player.ax += delta * AIR_JERK;
+            player.vx += delta * AIR_ACCEL;
         } else {
-            if(player.ax < 0) {
-                player.ax = 0;
-            }
             if(player.vx < 0) {
-                if(Math.abs(player.vx) < delta * FRICTION) {
-                    player.vx = 0;
-                } else {
-                    player.vx += delta * FRICTION;
-                }
+                player.vx -= delta * player.vx * FRICTION_DECEL;
+                if(-player.vx < MIN_SLIDE_VELOCITY) player.vx = 0;
             }
-            player.ax += delta * GROUND_JERK;
+            player.vx += delta * GROUND_ACCEL;
         }
     } else {
-        player.ax = 0;
         if(!airborn) {
-            if(Math.abs(player.vx) < delta * FRICTION) {
-                player.vx = 0;
-            } else if(player.vx > 0) {
-                player.vx -= delta * FRICTION;
-            } else {
-                player.vx += delta * FRICTION;
-            }
+            player.vx -= delta * player.vx * FRICTION_DECEL;
+            if(Math.abs(player.vx) < MIN_SLIDE_VELOCITY) player.vx = 0;
         }
     }
 
     if(inputs.up) {
         if(!airborn) {
             jumpTimer = MAX_JUMP_TIME;
+            player.vy = -JUMP_VELOCITY;
             airborn = true;
         }
 
         if(jumpTimer > 0) {
-            player.ay -= delta * JUMP_JERK;
             jumpTimer -= delta;
         } else {
-            if(player.vy < 0) player.ay = GRAVITY;
-            player.ay += delta * GRAVITY;
+            if(player.vy < 0) player.vy -= delta * player.vy * JUMP_DECEL;
+            player.vy += delta * GRAVITY;
         }
 
     } else {
         jumpTimer = 0;
-        if(player.vy < 0) player.ay = GRAVITY;
-        player.ay += delta * GRAVITY;
+        if(player.vy < 0) player.vy -= delta * player.vy * JUMP_DECEL;
+        player.vy += delta * GRAVITY;
     }
 
-    player.vx += player.ax * delta;
-    player.vy += player.ay * delta;
-
-    if(Math.abs(player.vx) > MAX_GROUND_VELOCITY) {
-        player.ax = 0;
+    if(Math.abs(player.vx) > MAX_VELOCITY) {
         if(player.vx > 0) {
-            player.vx = MAX_GROUND_VELOCITY;
+            player.vx = MAX_VELOCITY;
         } else {
-            player.vx = -MAX_GROUND_VELOCITY;
+            player.vx = -MAX_VELOCITY;
         }
-    }
-
-    if(player.vy < -MAX_JUMP_VELOCITY) {
-        player.vy = -MAX_JUMP_VELOCITY;
-        player.ay = 0;
     }
 
     if(player.vy > MAX_FALL_VELOCITY) {
         player.vy = MAX_FALL_VELOCITY;
-        player.ay = 0;
     }
 
     player.x += player.vx * delta;
@@ -195,48 +170,29 @@ function solveCollision(platform) {
     var absDX = Math.abs(dx);
     var absDY = Math.abs(dy);
 
-    // corner collision
-    if(Math.abs(absDX - absDY) < .1) {
-        if(dx < 0) {
-            player.setLeft(platform.getRight());
-        } else {
-            player.setRight(platform.getLeft());
-        }
-
-        if(dy < 0) {
-            player.setTop(platform.getBottom());
-        } else {
-            player.setBottom(platform.getTop());
-        }
-
-        player.ax = 0;
-        player.ay = 0;
-        player.vx *= -BOUNCE;
-        player.vy *= -BOUNCE;
-
     // horizontal collision
-    } else if(absDX > absDY) {
+    if(absDX > absDY) {
         if(dx < 0) {
             player.setLeft(platform.getRight());
         } else {
             player.setRight(platform.getLeft());
         }
 
-        player.ax = 0;
         player.vx *= -BOUNCE;
+        if(Math.abs(player.vx) < MIN_BOUNCE_VELOCITY) player.vx = 0;
 
     // vertical collision
     } else {
         if(dy < 0) {
             player.setTop(platform.getBottom());
             player.vy *= -BOUNCE;
+            if(Math.abs(player.vy) < MIN_BOUNCE_VELOCITY) player.vy = 0;
             jumpTimer = 0;
         } else {
             player.setBottom(platform.getTop());
             player.vy = 0;
             airborn = false;
         }
-        player.ay = 0;
     }
 }
 

@@ -11,9 +11,6 @@ function entity(x, y, w, h) {
     this.vx = 0;
     this.vy = 0;
 
-    this.ax = 0;
-    this.ay = 0;
-
     this.getMidX = function() {
         return this.halfWidth + this.x;
     };
