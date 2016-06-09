@@ -2,8 +2,12 @@
 var canvas;
 var ctx;
 var player;
+var flag;
 var airborn = true;
 var jumpTimer = 0;
+var score = 0;
+var high = 0;
+var lava = false;
 var platforms = [];
 var edges = [];
 var inputs = {
@@ -38,12 +42,16 @@ function init() {
     document.addEventListener('keyup', keyUp, false);
 
     player = new entity();
-    player.y = 550;
+    player.x = 0;
+    player.y = canvas.height - player.height;
 
     platforms.push(new entity(100, 550));
     platforms.push(new entity(225, 475));
     platforms.push(new entity(100, 400));
     platforms.push(new entity(225, 325));
+
+    flag = new entity(0, 0, 10, 10);
+    moveFlag();
 
     edges.push(new entity(-100, 0, 100, 600));
     edges.push(new entity(0, -100, 600, 100));
@@ -196,6 +204,11 @@ function solveCollision(platform) {
     }
 }
 
+function pick(list) {
+    var index = Math.floor(Math.random() * list.length);
+    return list[index];
+}
+
 function checkCollision() {
     var platform;
 
@@ -207,13 +220,32 @@ function checkCollision() {
         }
     }
 
+    var touch = false;
     //check edge collision
     for(var t=0; t<edges.length; t++) {
         platform = edges[t];
         if(collideRect(player, platform)) {
             solveCollision(platform);
+            touch = true;
+            if(!lava) {
+                score -= 10;
+                lava = true;
+            }
         }
     }
+    lava = touch;
+
+    if(collideRect(player, flag)) {
+        score += 10;
+        if(score > high) high = score;
+        moveFlag();
+    }
+}
+
+function moveFlag() {
+    var platform = pick(platforms);
+    flag.setMidX(platform.getMidX());
+    flag.setMidY(platform.getTop() - platform.halfHeight);
 }
 
 function checkAirborn() {
@@ -238,11 +270,25 @@ function checkAirborn() {
         }
     }
 
+    //check flag collision
+    if(collideRect(player, flag)) {
+        score += 10;
+        if(score > high) high = score;
+        moveFlag();
+    }
+
     player.y -= 1;
 }
 
 function renderEntities() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.font = 'bold 18px Arial';
+    ctx.fillStyle = 'white';
+    ctx.fillText('High: ', canvas.width - 100, 30);
+    ctx.fillText(high, canvas.width - 50, 30);
+    ctx.fillText('Score: ', canvas.width - 110, 60);
+    ctx.fillText(score, canvas.width - 50, 60);
 
     ctx.fillStyle = 'white';
     ctx.fillRect(player.x, player.y, player.width, player.height);
@@ -253,6 +299,9 @@ function renderEntities() {
         platform = platforms[p];
         ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
     }
+
+    ctx.fillStyle = 'blue';
+    ctx.fillRect(flag.x, flag.y, flag.width, flag.height);
 }
 
 function gameLoop() {

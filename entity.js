@@ -35,6 +35,14 @@ function entity(x, y, w, h) {
         return this.y + this.height;
     };
 
+    this.setMidX = function(val) {
+        this.x = val - this.halfWidth;
+    }
+
+    this.setMidY = function(val) {
+        this.y = val - this.halfHeight;
+    }
+
     this.setLeft = function(val) {
         this.x = val;
     };
