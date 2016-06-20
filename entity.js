@@ -1,23 +1,15 @@
 function entity(x, y, w, h) {
-    this.width = w || 50;
-    this.height = h || 50;
+    this.x = x;
+    this.y = y;
 
-    this.halfWidth = this.width * .5;
-    this.halfHeight = this.height * .5;
+    this.width = w;
+    this.height = h;
 
-    this.x = x || 0;
-    this.y = y || 0;
+    this.halfWidth = this.width / 2;
+    this.halfHeight = this.width / 2;
 
     this.vx = 0;
     this.vy = 0;
-
-    this.getMidX = function() {
-        return this.halfWidth + this.x;
-    };
-
-    this.getMidY = function() {
-        return this.halfHeight + this.y;
-    };
 
     this.getLeft = function() {
         return this.x;
@@ -35,13 +27,13 @@ function entity(x, y, w, h) {
         return this.y + this.height;
     };
 
-    this.setMidX = function(val) {
-        this.x = val - this.halfWidth;
-    }
+    this.getMidX = function() {
+        return this.x + this.halfWidth;
+    };
 
-    this.setMidY = function(val) {
-        this.y = val - this.halfHeight;
-    }
+    this.getMidY = function() {
+        return this.y + this.halfHeight;
+    };
 
     this.setLeft = function(val) {
         this.x = val;
@@ -57,5 +49,13 @@ function entity(x, y, w, h) {
 
     this.setBottom = function(val) {
         this.y = val - this.height;
+    };
+
+    this.setMidX = function(val) {
+        this.x = val - this.halfWidth;
+    };
+
+    this.setMidY = function(val) {
+        this.y = val - this.halfHeight;
     };
 }

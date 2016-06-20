@@ -1,15 +1,22 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <meta charset='utf-8'>
-    <title>Stompy</title>
-    <link rel='stylesheet' type='text/css' href='main.css'>
-    <script src='entity.js'></script>
-    <script src='client.js'></script>
-</head>
-
-<body onload='init()'>
-    <canvas id='canvas'></canvas>
-</body>
-
+    <head>
+        <meta charset='utf-8'>
+        <title>Stompy</title>
+        <script src='entity.js'></script>
+        <script src='sprite.js'></script>
+        <script src='stompy.js'></script>
+        <style>
+            body {
+                background-color: gray;
+            }
+            #canvas {
+                background-color: black;
+                margin: 10px;
+            }
+        </style>
+    </head>
+    <body onload='init()'>
+        <canvas id='canvas'></canvas>
+    </body>
 </html>
