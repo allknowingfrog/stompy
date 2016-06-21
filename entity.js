@@ -1,4 +1,4 @@
-function entity(x, y, w, h) {
+function Entity(x, y, w, h) {
     this.x = x;
     this.y = y;
 

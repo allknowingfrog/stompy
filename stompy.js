@@ -1,18 +1,6 @@
 var canvas;
 var ctx;
-var score;
-var highScore;
-var player;
-var airborn;
-var sliding;
-var jumpTimer = 0;
-var jetPack = 100;
-var inputs = {
-    left: false,
-    up: false,
-    right: false,
-    down: false
-};
+var players = [];
 var spritesheet = new Image();
 var sprites = {
     left: new sprite(30, 38, 30, 38),
@@ -24,11 +12,10 @@ var sprites = {
     jet: new sprite(80, 64, 15, 15),
     enemy: new sprite(95, 64, 29, 20)
 };
-var facingRight = true;
 var platforms = [];
 var target;
-var jet;
 var enemy;
+var jet;
 var enemyPlat;
 var timestamp = Date.now();
 
@@ -60,22 +47,30 @@ function init() {
     canvas.height = 600;
     ctx = canvas.getContext('2d');
 
-    platforms.push(new entity(100, 500, 64, 64));
-    platforms.push(new entity(195, 425, 64, 64));
-    platforms.push(new entity(400, 350, 64, 64));
-    platforms.push(new entity(195, 275, 64, 64));
-    platforms.push(new entity(300, 150, 64, 64));
+    platforms.push(new Entity(100, 500, 64, 64));
+    platforms.push(new Entity(195, 425, 64, 64));
+    platforms.push(new Entity(400, 350, 64, 64));
+    platforms.push(new Entity(195, 275, 64, 64));
+    platforms.push(new Entity(300, 150, 64, 64));
 
-    jet = new entity(-100, -100, 15, 15);
-
-    enemy = new entity(0, 0, 29, 20);
+    enemy = new Entity(0, 0, 29, 20);
     moveEnemy();
 
-    target = new entity(0, 0, 20, 20);
+    target = new Entity(0, 0, 20, 20);
     moveTarget();
 
-    player = new entity(0, 0, 30, 38);
-    reset();
+    jet = new Entity(0, 0, 15, 15);
+
+    var player;
+    player = new Player(1, 1, 30, 38, 37, 38, 39, 40);
+    players.push(player);
+
+    if(!localStorage.getItem('dvorak')) {
+        player = new Player(canvas.width - 1, 1, 30, 38, 65, 87, 68, 83);
+    } else {
+        player = new Player(canvas.width - 1, 1, 30, 38, 65, 188, 69, 79);
+    }
+    players.push(player);
 
     document.addEventListener('keydown', keyDown, false);
     document.addEventListener('keyup', keyUp, false);
@@ -83,9 +78,9 @@ function init() {
     gameLoop();
 }
 
-function reset() {
-    score = 0;
-    jetPack = 100;
+function reset(player) {
+    player.score = 0;
+    player.jetPack = 100;
 
     player.vx = 0;
     player.vy = 0;
@@ -93,24 +88,16 @@ function reset() {
     player.setBottom(canvas.height);
 }
 
-function moveTarget() {
-    score += 5;
-    if(score > highScore) {
-        highScore = score;
-        localStorage.setItem('high', highScore);
-    }
+function moveTarget(player) {
+    if(player) player.score += 5;
 
     var platform = pick(platforms);
     target.setMidX(platform.getMidX());
     target.setMidY(platform.getTop() - platform.halfHeight);
 }
 
-function moveEnemy() {
-    score += 20;
-    if(score > highScore) {
-        highScore = score;
-        localStorage.setItem('high', highScore);
-    }
+function moveEnemy(player) {
+    if(player) player.score += 20;
 
     enemy.vx = ENEMY_VELOCITY;
     enemyPlat = pick(platforms);
@@ -131,70 +118,67 @@ function updatePosition() {
     if(delta > MAX_DELTA) delta = MAX_DELTA;
     timestamp = now;
 
-    if(inputs.left) {
-        facingRight = false;
-        if(!airborn && player.vx > 0) {
+    var player;
+    for(var i=0; i<players.length; i++) {
+        player = players[i];
+
+        if(player.inputs.left) {
+            player.facingRight = false;
+            if(!player.airborn && player.vx > 0) {
+                player.vx -= delta * player.vx * FRICTION_FACTOR;
+            }
+            player.vx -= delta * ACCEL;
+        } else if(player.inputs.right) {
+            player.facingRight = true;
+            if(!player.airborn && player.vx < 0) {
+                player.vx -= delta * player.vx * FRICTION_FACTOR;
+            }
+            player.vx += delta * ACCEL;
+        } else if(!player.airborn) {
             player.vx -= delta * player.vx * FRICTION_FACTOR;
         }
-        player.vx -= delta * ACCEL;
-    } else if(inputs.right) {
-        facingRight = true;
-        if(!airborn && player.vx < 0) {
-            player.vx -= delta * player.vx * FRICTION_FACTOR;
-        }
-        player.vx += delta * ACCEL;
-    } else if(!airborn) {
-        player.vx -= delta * player.vx * FRICTION_FACTOR;
-    }
 
-    var jetting = false;
-    if(inputs.up) {
-        if(!airborn) {
-            jumpTimer = JUMP_TIME;
-            player.vy = -JUMP_VELOCITY;
-        }
+        player.jetting = false;
+        if(player.inputs.up) {
+            if(!player.airborn) {
+                player.jumpTimer = JUMP_TIME;
+                player.vy = -JUMP_VELOCITY;
+            }
 
-        if(jumpTimer > 0) {
-            jumpTimer -= delta;
+            if(player.jumpTimer > 0) {
+                player.jumpTimer -= delta;
+            } else {
+                player.vy += delta * GRAVITY;
+            }
+        } else if(player.inputs.down && player.jetPack > 0) {
+            player.jetting = true;
+            player.vy -= delta * ACCEL;
+            player.jetPack -= delta * JET_DECAY;
         } else {
+            if(player.jumpTimer) player.jumpTimer = 0;
+            if(player.vy < 0) player.vy -= delta * player.vy * DROP_FACTOR;
             player.vy += delta * GRAVITY;
         }
-    } else if(inputs.down && jetPack > 0) {
-        jetting = true;
-        player.vy -= delta * ACCEL;
-        jetPack -= delta * JET_DECAY;
-    } else {
-        if(jumpTimer) jumpTimer = 0;
-        if(player.vy < 0) player.vy -= delta * player.vy * DROP_FACTOR;
-        player.vy += delta * GRAVITY;
-    }
 
-    if(!inputs.down && jetPack < 100) {
-        jetPack += delta * JET_RECOVER;
-        if(jetPack > 100) jetPack = 100;
-    }
+        if(!player.inputs.down && player.jetPack < 100) {
+            player.jetPack += delta * JET_RECOVER;
+            if(player.jetPack > 100) player.jetPack = 100;
+        }
 
-    if(sliding && player.vy > 0) {
-        player.vy -= delta * player.vy * SLIDE_FACTOR;
-    }
+        if(player.sliding && player.vy > 0) {
+            player.vy -= delta * player.vy * SLIDE_FACTOR;
+        }
 
-    if(player.vx > MAX_VELOCITY) {
-        player.vx = MAX_VELOCITY;
-    } else if(player.vx < -MAX_VELOCITY) {
-        player.vx = -MAX_VELOCITY;
-    } else if(Math.abs(player.vx) < MIN_VELOCITY) {
-        player.vx = 0;
-    }
+        if(player.vx > MAX_VELOCITY) {
+            player.vx = MAX_VELOCITY;
+        } else if(player.vx < -MAX_VELOCITY) {
+            player.vx = -MAX_VELOCITY;
+        } else if(Math.abs(player.vx) < MIN_VELOCITY) {
+            player.vx = 0;
+        }
 
-    player.x += delta * player.vx;
-    player.y += delta * player.vy;
-
-    if(jetting) {
-        jet.setMidX(player.getMidX());
-        jet.setTop(player.getBottom() - 3);
-    } else {
-        jet.x = -100;
-        jet.y = -100;
+        player.x += delta * player.vx;
+        player.y += delta * player.vy;
     }
 
     if(enemy.vx > 0) {
@@ -212,77 +196,79 @@ function updatePosition() {
 }
 
 function handleCollision() {
-    airborn = true;
-    sliding = false;
+    var player;
+    for(var i=0; i<players.length; i++) {
+        player = players[i];
+        if(collideRect(player, enemy)) reset(player);
 
-    if(collideRect(player, enemy)) reset();
+        player.airborn = true;
+        player.sliding = false;
 
-    if(collideRect(jet, enemy)) moveEnemy();
+        var platform, dx, dy;
+        for(var p=0; p<platforms.length; p++) {
+            platform = platforms[p];
+            if(collideRect(player, platform)) {
+                dx = (platform.getMidX() - player.getMidX()) / platform.width;
+                dy = (platform.getMidY() - player.getMidY()) / platform.height;
 
-    var platform, dx, dy;
-    for(var p=0; p<platforms.length; p++) {
-        platform = platforms[p];
-        if(collideRect(player, platform)) {
-            dx = (platform.getMidX() - player.getMidX()) / platform.width;
-            dy = (platform.getMidY() - player.getMidY()) / platform.height;
-
-            if(Math.abs(dx) > Math.abs(dy)) {
-                sliding = true;
-                if(dx < 0) {
-                    if(player.vx < 0) player.vx = 0;
-                    player.setLeft(platform.getRight());
-                } else {
-                    if(player.vx > 0) player.vx = 0;
-                    player.setRight(platform.getLeft());
-                }
-
-            } else {
-                if(dy < 0) {
-                    if(player.vy < 0) player.vy = 0;
-                    player.setTop(platform.getBottom());
-                } else {
-                    if(player.vy > SPLATTER_VELOCITY) {
-                        reset();
+                if(Math.abs(dx) > Math.abs(dy)) {
+                    player.sliding = true;
+                    if(dx < 0) {
+                        if(player.vx < 0) player.vx = 0;
+                        player.setLeft(platform.getRight());
                     } else {
-                        if(player.vy > 0) player.vy = 0;
-                        player.setBottom(platform.getTop());
-                        if(Math.abs(player.vx) < EDGE_CREEP) {
-                            var x = player.getMidX();
-                            if(x < platform.getLeft()) {
-                                if(!inputs.right) player.vx = -EDGE_CREEP;
-                            } else if(x > platform.getRight()) {
-                                if(!inputs.left) player.vx = EDGE_CREEP;
+                        if(player.vx > 0) player.vx = 0;
+                        player.setRight(platform.getLeft());
+                    }
+
+                } else {
+                    if(dy < 0) {
+                        if(player.vy < 0) player.vy = 0;
+                        player.setTop(platform.getBottom());
+                    } else {
+                        if(player.vy > SPLATTER_VELOCITY) {
+                            reset(player);
+                        } else {
+                            if(player.vy > 0) player.vy = 0;
+                            player.setBottom(platform.getTop());
+                            if(Math.abs(player.vx) < EDGE_CREEP) {
+                                var x = player.getMidX();
+                                if(x < platform.getLeft()) {
+                                    if(!player.inputs.right) player.vx = -EDGE_CREEP;
+                                } else if(x > platform.getRight()) {
+                                    if(!player.inputs.left) player.vx = EDGE_CREEP;
+                                }
                             }
+                            player.airborn = false;
                         }
-                        airborn = false;
                     }
                 }
             }
         }
-    }
 
-    if(collideRect(player, target)) moveTarget();
+        if(collideRect(player, target)) moveTarget(player);
 
-    if(player.getLeft() < 0) {
-        sliding = true;
-        player.setLeft(0);
-        player.vx = 0;
-    } else if(player.getRight() > canvas.width) {
-        sliding = true;
-        player.setRight(canvas.width);
-        player.vx = 0;
-    }
+        if(player.getLeft() < 0) {
+            player.sliding = true;
+            player.setLeft(0);
+            player.vx = 0;
+        } else if(player.getRight() > canvas.width) {
+            player.sliding = true;
+            player.setRight(canvas.width);
+            player.vx = 0;
+        }
 
-    if(player.getTop() < 0) {
-        player.setTop(0);
-        player.vy = 0;
-    } else if(player.getBottom() > canvas.height) {
-        if(player.vy > SPLATTER_VELOCITY) {
-            reset();
-        } else {
-            player.setBottom(canvas.height);
+        if(player.getTop() < 0) {
+            player.setTop(0);
             player.vy = 0;
-            airborn = false;
+        } else if(player.getBottom() > canvas.height) {
+            if(player.vy > SPLATTER_VELOCITY) {
+                reset(player);
+            } else {
+                player.setBottom(canvas.height);
+                player.vy = 0;
+                player.airborn = false;
+            }
         }
     }
 }
@@ -290,39 +276,50 @@ function handleCollision() {
 function updateCanvas() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+/*
     ctx.font = 'bold 18px monospace';
     ctx.fillStyle = 'white';
     ctx.fillText(' HIGH: '+pad(highScore, SCORE_DIGITS), 30, 40);
     ctx.fillText('SCORE: '+pad(score, SCORE_DIGITS), 30, 70);
+*/
 
-    var bar = (jetPack / 100) * player.width;
-    var color = 'green';
-    if(jetPack < 50) {
-        color = 'red';
-    } else if(jetPack < 75) {
-        color = 'yellow';
-    }
-    ctx.fillStyle = color;
-    ctx.fillRect(player.getLeft(), player.getTop() - 10, bar, 4);
+    var player;
+    for(var i=0; i<players.length; i++) {
+        player = players[i];
 
-    drawSprite(sprites.jet, jet);
-
-    var sprite;
-    if(airborn) {
-        if(facingRight) {
-            sprite = sprites.rightJump;
-        } else {
-            sprite = sprites.leftJump;
+        var bar = (player.jetPack / 100) * player.width;
+        var color = 'green';
+        if(player.jetPack < 50) {
+            color = 'red';
+        } else if(player.jetPack < 75) {
+            color = 'yellow';
         }
-    } else {
-        if(facingRight) {
-            sprite = sprites.right;
-        } else {
-            sprite = sprites.left;
-        }
-    }
+        ctx.fillStyle = color;
+        ctx.fillRect(player.getLeft(), player.getTop() - 10, bar, 4);
 
-    drawSprite(sprite, player);
+        if(player.jetting) {
+            jet.setMidX(player.getMidX());
+            jet.setTop(player.getBottom() - 3);
+            drawSprite(sprites.jet, jet);
+        }
+
+        var sprite;
+        if(player.airborn) {
+            if(player.facingRight) {
+                sprite = sprites.rightJump;
+            } else {
+                sprite = sprites.leftJump;
+            }
+        } else {
+            if(player.facingRight) {
+                sprite = sprites.right;
+            } else {
+                sprite = sprites.left;
+            }
+        }
+
+        drawSprite(sprite, player);
+    }
     
     drawSprite(sprites.enemy, enemy);
 
@@ -343,37 +340,15 @@ function drawSprite(s, e) {
 
 function keyDown(e) {
     e.preventDefault();
-    switch(e.keyCode) {
-        case 37: //left
-            inputs.left = true;
-            break;
-        case 38: //up
-            inputs.up = true;
-            break;
-        case 39: //right
-            inputs.right = true;
-            break;
-        case 40: //down
-            inputs.down = true;
-            break;
+    for(var i=0; i<players.length; i++) {
+        players[i].input(e.keyCode, true);
     }
 }
 
 function keyUp(e) {
     e.preventDefault();
-    switch(e.keyCode) {
-        case 37: //left
-            inputs.left = false;
-            break;
-        case 38: //up
-            inputs.up = false;
-            break;
-        case 39: //right
-            inputs.right = false;
-            break;
-        case 40: //down
-            inputs.down = false;
-            break;
+    for(var i=0; i<players.length; i++) {
+        players[i].input(e.keyCode, false);
     }
 }
 
