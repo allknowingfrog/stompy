@@ -79,7 +79,8 @@ function init() {
 }
 
 function reset(player) {
-    player.score = 0;
+    player.score -= 15;
+    if(player.score < 0) player.score = 0;
     player.jetPack = 100;
 
     player.vx = 0;
@@ -276,12 +277,10 @@ function handleCollision() {
 function updateCanvas() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-/*
     ctx.font = 'bold 18px monospace';
     ctx.fillStyle = 'white';
-    ctx.fillText(' HIGH: '+pad(highScore, SCORE_DIGITS), 30, 40);
-    ctx.fillText('SCORE: '+pad(score, SCORE_DIGITS), 30, 70);
-*/
+    ctx.fillText(pad(players[0].score, SCORE_DIGITS), 30, 40);
+    ctx.fillText(pad(players[1].score, SCORE_DIGITS), canvas.width - 120, 40);
 
     var player;
     for(var i=0; i<players.length; i++) {
